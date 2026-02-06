@@ -7,6 +7,11 @@ import {
   getLauncherActivityFromApk,
   launchApp,
 } from '../utils/android'
+import {
+  getCachedProjectData,
+  setCachedProjectData,
+  readCache,
+} from '../utils/cache'
 import chalk from 'chalk'
 
 export default new Command('run')
@@ -41,32 +46,62 @@ export default new Command('run')
     console.log(chalk.cyan('📲 Installing app...'))
     await exec(`adb install -r "${apkPath}"`, { cwd: androidRoot })
 
-    // 5. Extract package from APK
-    console.log(chalk.cyan('🔍 Extracting package name from APK...'))
-    const packageName = await getPackageFromApk(apkPath)
+    // 5. Resolve applicationId (with cache)
+    console.log(chalk.cyan('🔍 Resolving applicationId...'))
 
-    if (!packageName) {
-      console.log(chalk.red('✖ Could not extract package name from APK'))
+    let packageName: string | null = null
+    let activity: string | null = null
+
+    const cachedData = getCachedProjectData(androidRoot, 'debug')
+
+    if (cachedData) {
+      // Caché válida
       console.log(
-        chalk.yellow(
-          '   Make sure Android SDK build-tools (aapt) are available in your PATH'
-        )
+        chalk.gray(`⚡ Using cached applicationId (${cachedData.applicationId})`)
       )
-      process.exit(1)
+      packageName = cachedData.applicationId
+      activity = cachedData.launcherActivity
+    } else {
+      // Caché inválida o no existe
+      const cache = readCache()
+      const cacheKey = `${androidRoot}:debug`
+
+      if (cache[cacheKey]) {
+        console.log(chalk.yellow('♻️  Cache invalidated (project files changed)'))
+      }
+
+      console.log(chalk.cyan('🔍 Extracting applicationId using aapt...'))
+      packageName = await getPackageFromApk(apkPath)
+
+      if (!packageName) {
+        console.log(chalk.red('✖ Could not extract package name from APK'))
+        console.log(
+          chalk.yellow(
+            '   Make sure Android SDK build-tools (aapt) are available in your PATH'
+          )
+        )
+        process.exit(1)
+      }
+
+      console.log(chalk.gray(`   Package: ${packageName}`))
+
+      console.log(chalk.cyan('🔍 Extracting launcher activity from APK...'))
+      activity = await getLauncherActivityFromApk(apkPath)
+
+      if (!activity) {
+        console.log(chalk.red('✖ Could not extract launcher activity from APK'))
+        process.exit(1)
+      }
+
+      console.log(chalk.gray(`   Activity: ${activity}`))
+
+      // Guardar en caché
+      setCachedProjectData(
+        androidRoot,
+        { applicationId: packageName, launcherActivity: activity },
+        'debug'
+      )
     }
-
-    console.log(chalk.gray(`   Package: ${packageName}`))
-
-    // 6. Extract launcher activity from APK
-    console.log(chalk.cyan('🔍 Extracting launcher activity from APK...'))
-    const activity = await getLauncherActivityFromApk(apkPath)
-
-    if (!activity) {
-      console.log(chalk.red('✖ Could not extract launcher activity from APK'))
-      process.exit(1)
-    }
-
-    console.log(chalk.gray(`   Activity: ${activity}`))
 
     // 7. Launch
     console.log(chalk.cyan('🚀 Launching app...'))

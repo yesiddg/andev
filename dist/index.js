@@ -7,6 +7,7 @@ const commander_1 = require("commander");
 const run_1 = __importDefault(require("./commands/run"));
 const build_1 = __importDefault(require("./commands/build"));
 const emulator_1 = __importDefault(require("./commands/emulator"));
+const cache_1 = __importDefault(require("./commands/cache"));
 const program = new commander_1.Command();
 program
     .name('andev')
@@ -15,4 +16,5 @@ program
 program.addCommand(run_1.default);
 program.addCommand(build_1.default);
 program.addCommand(emulator_1.default);
+program.addCommand(cache_1.default);
 program.parse();

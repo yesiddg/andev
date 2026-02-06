@@ -2,6 +2,7 @@ import { Command } from 'commander'
 import run from './commands/run'
 import build from './commands/build'
 import emulator from './commands/emulator'
+import cache from './commands/cache'
 
 const program = new Command()
 
@@ -13,5 +14,6 @@ program
 program.addCommand(run)
 program.addCommand(build)
 program.addCommand(emulator)
+program.addCommand(cache)
 
 program.parse()

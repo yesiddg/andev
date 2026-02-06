@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const commander_1 = require("commander");
 const exec_1 = require("../utils/exec");
 const android_1 = require("../utils/android");
+const cache_1 = require("../utils/cache");
 const chalk_1 = __importDefault(require("chalk"));
 exports.default = new commander_1.Command('run')
     .description('Build, install and run the app on a connected device')
@@ -30,23 +31,42 @@ exports.default = new commander_1.Command('run')
     // 4. Install
     console.log(chalk_1.default.cyan('📲 Installing app...'));
     await (0, exec_1.exec)(`adb install -r "${apkPath}"`, { cwd: androidRoot });
-    // 5. Extract package from APK
-    console.log(chalk_1.default.cyan('🔍 Extracting package name from APK...'));
-    const packageName = await (0, android_1.getPackageFromApk)(apkPath);
-    if (!packageName) {
-        console.log(chalk_1.default.red('✖ Could not extract package name from APK'));
-        console.log(chalk_1.default.yellow('   Make sure Android SDK build-tools (aapt) are available in your PATH'));
-        process.exit(1);
+    // 5. Resolve applicationId (with cache)
+    console.log(chalk_1.default.cyan('🔍 Resolving applicationId...'));
+    let packageName = null;
+    let activity = null;
+    const cachedData = (0, cache_1.getCachedProjectData)(androidRoot, 'debug');
+    if (cachedData) {
+        // Caché válida
+        console.log(chalk_1.default.gray(`⚡ Using cached applicationId (${cachedData.applicationId})`));
+        packageName = cachedData.applicationId;
+        activity = cachedData.launcherActivity;
     }
-    console.log(chalk_1.default.gray(`   Package: ${packageName}`));
-    // 6. Extract launcher activity from APK
-    console.log(chalk_1.default.cyan('🔍 Extracting launcher activity from APK...'));
-    const activity = await (0, android_1.getLauncherActivityFromApk)(apkPath);
-    if (!activity) {
-        console.log(chalk_1.default.red('✖ Could not extract launcher activity from APK'));
-        process.exit(1);
+    else {
+        // Caché inválida o no existe
+        const cache = (0, cache_1.readCache)();
+        const cacheKey = `${androidRoot}:debug`;
+        if (cache[cacheKey]) {
+            console.log(chalk_1.default.yellow('♻️  Cache invalidated (project files changed)'));
+        }
+        console.log(chalk_1.default.cyan('🔍 Extracting applicationId using aapt...'));
+        packageName = await (0, android_1.getPackageFromApk)(apkPath);
+        if (!packageName) {
+            console.log(chalk_1.default.red('✖ Could not extract package name from APK'));
+            console.log(chalk_1.default.yellow('   Make sure Android SDK build-tools (aapt) are available in your PATH'));
+            process.exit(1);
+        }
+        console.log(chalk_1.default.gray(`   Package: ${packageName}`));
+        console.log(chalk_1.default.cyan('🔍 Extracting launcher activity from APK...'));
+        activity = await (0, android_1.getLauncherActivityFromApk)(apkPath);
+        if (!activity) {
+            console.log(chalk_1.default.red('✖ Could not extract launcher activity from APK'));
+            process.exit(1);
+        }
+        console.log(chalk_1.default.gray(`   Activity: ${activity}`));
+        // Guardar en caché
+        (0, cache_1.setCachedProjectData)(androidRoot, { applicationId: packageName, launcherActivity: activity }, 'debug');
     }
-    console.log(chalk_1.default.gray(`   Activity: ${activity}`));
     // 7. Launch
     console.log(chalk_1.default.cyan('🚀 Launching app...'));
     await (0, android_1.launchApp)(packageName, activity);
